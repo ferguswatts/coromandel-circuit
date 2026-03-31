@@ -12,7 +12,7 @@ body{font-family:'DM Sans',sans-serif;overflow:hidden;height:100vh;width:100vw;d
 #map-wrap{width:50%;height:100vh;position:relative;flex-shrink:0}
 #map{position:absolute;inset:0}
 #pdf-wrap{width:50%;height:100vh;background:#2a2a28;display:flex;flex-direction:column;border-left:1px solid rgba(232,230,223,0.08)}
-#pdf-wrap iframe{flex:1;width:100%;border:none}
+#pdf-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#1a1a18;}#pdfCanvas canvas{display:block;width:100%;}
 .card-overlay{position:fixed;z-index:2000;pointer-events:none;top:0;left:0;width:50%;height:100vh;display:flex;align-items:flex-end;justify-content:center;padding:20px;opacity:0;transition:opacity 0.3s ease}
 .card-overlay.visible{opacity:1;pointer-events:auto}
 .card-overlay-bg{position:absolute;inset:0;background:rgba(0,0,0,0.35);cursor:pointer}
@@ -64,13 +64,14 @@ body{font-family:'DM Sans',sans-serif;overflow:hidden;height:100vh;width:100vw;d
   <div class="title-pill"><h1>Coromandel E-Bike Circuit</h1><div class="pill-dot"></div><span class="pill-stat">493km &middot; 23&ndash;30 Apr</span></div>
 </div>
 <div id="pdf-wrap">
-  <iframe id="pdfFrame" src="coromandel-trip-guide.pdf#toolbar=1&navpanes=0&view=FitH"></iframe>
+  <div id="pdf-scroll"><div id="pdfCanvas"><div style="color:rgba(232,230,223,0.3);font-family:DM Sans,sans-serif;font-size:13px;text-align:center;padding:40px">Loading guide...</div></div></div>
 </div>
 <div class="card-overlay" id="overlay">
   <div class="card-overlay-bg" onclick="closeCard()"></div>
   <div class="card" id="card"></div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 var DAY_PAGES=[2,2,3,4,4,5,5,6];
 var DAYS=[
@@ -169,7 +170,7 @@ function openCard(idx){
       '</div>'+
     '</div>';
   document.getElementById('overlay').classList.add('visible');
-  document.getElementById('pdfFrame').src='coromandel-trip-guide.pdf#page='+DAY_PAGES[idx];
+  goToPage(DAY_PAGES[idx]);
   segLayers.forEach(function(l,i){
     if(i===idx){l.setStyle({opacity:1,weight:6});l.bringToFront()}
     else l.setStyle({opacity:0.12,weight:3});
@@ -191,6 +192,37 @@ document.addEventListener('keydown',function(e){
   if(activeIdx!==null && e.key==='ArrowLeft' && activeIdx>0) openCard(activeIdx-1);
 });
 setTimeout(function(){map.fitBounds(L.latLngBounds(ROUTE),{padding:[40,40]})},100);
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+var pdfPageEls=[];
+function renderPDF(){
+  var container=document.getElementById('pdfCanvas');
+  pdfjsLib.getDocument('coromandel-trip-guide.pdf').promise.then(function(pdf){
+    container.innerHTML='';
+    var total=pdf.numPages;
+    function renderPage(n){
+      if(n>total)return;
+      pdf.getPage(n).then(function(page){
+        var wrap=document.createElement('div');
+        wrap.id='pdf-page-'+n;
+        wrap.style.marginBottom='2px';
+        var canvas=document.createElement('canvas');
+        var vp=page.getViewport({scale:1});
+        var scale=container.clientWidth/vp.width;
+        var svp=page.getViewport({scale:scale});
+        canvas.width=svp.width;canvas.height=svp.height;
+        wrap.appendChild(canvas);container.appendChild(wrap);
+        pdfPageEls[n]=wrap;
+        page.render({canvasContext:canvas.getContext('2d'),viewport:svp}).promise.then(function(){renderPage(n+1);});
+      });
+    }
+    renderPage(1);
+  });
+}
+function goToPage(n){
+  var el=document.getElementById('pdf-page-'+n);
+  if(el){document.getElementById('pdf-scroll').scrollTop=el.offsetTop;}
+}
+renderPDF();
 </script>
 </body>
 </html>
